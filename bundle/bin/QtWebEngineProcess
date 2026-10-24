@@ -1,0 +1,8 @@
+#!/bin/bash
+set -eu
+# The Flatpak portal starts sandboxed WebEngine children with a fresh loader
+# environment. Restore the bundle paths in that child, and preserve this
+# launcher's argv[0] so subsequent Chromium children use the launcher too.
+bundle_dir="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+. "$bundle_dir/libexec/environment"
+exec -a "$0" "$bundle_dir/qt/libexec/QtWebEngineProcess" "$@"

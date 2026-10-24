@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+bundle_dir="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+. "$bundle_dir/libexec/environment"
+exec "$OPENMODELICAHOME/bin/OMEdit" "$@"

@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+# OpenModelica's Debian build defaults to clang. The matching KDE SDK supplies
+# GCC, which OpenModelica also supports for compiling simulation code.
+exec gcc "$@"

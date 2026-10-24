@@ -1,0 +1,122 @@
+name: Build and verify OMEdit release
+
+on:
+  schedule:
+    - cron: '41 5 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Official OpenModelica version (empty = latest official release)'
+        type: string
+      publish:
+        description: Publish a verified GitHub release
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      build: ${{ steps.resolve.outputs.build }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install assembly tools and add Flathub
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak dpkg-dev binutils
+          sudo flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+      - name: Resolve exact inputs and check for an existing release
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          args=()
+          [ -z "$REQUESTED_VERSION" ] || args+=(--version "$REQUESTED_VERSION")
+          python3 scripts/resolve.py "${args[@]}" > build/inputs.lock.json
+          tag=$(jq -r .tag build/inputs.lock.json)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "$tag already exists; immutable assets will not be replaced."
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install the pinned BaseApp and verification SDK
+        if: steps.resolve.outputs.build == 'true'
+        run: |
+          set -euo pipefail
+          for component in baseapp sdk; do
+            ref=$(jq -r ".$component.ref" build/inputs.lock.json)
+            commit=$(jq -r ".$component.commit" build/inputs.lock.json)
+            sudo flatpak install --system -y --noninteractive flathub "$ref"
+            sudo flatpak update --system -y --noninteractive --commit="$commit" "$ref"
+            test "$(flatpak info --system --show-commit "$ref")" = "$commit"
+          done
+      - name: Assemble without modifying upstream binaries
+        if: steps.resolve.outputs.build == 'true'
+        run: python3 scripts/assemble.py build/inputs.lock.json build/omedit
+      - name: Verify every ELF, compiler version, and simulation offline
+        if: steps.resolve.outputs.build == 'true'
+        run: |
+          dbus-run-session -- flatpak run --unshare=network --filesystem="$PWD" \
+            --command=bash org.kde.Sdk//6.11 "$PWD/scripts/verify.sh" "$PWD/build/omedit"
+      - name: Package and retest the archive after extraction
+        if: steps.resolve.outputs.build == 'true'
+        run: |
+          bash scripts/package.sh
+          mkdir -p build/archive-test
+          tar --no-same-owner -xzf dist/omedit-*-x86_64.tar.gz -C build/archive-test
+          dbus-run-session -- flatpak run --unshare=network --filesystem="$PWD" \
+            --command=bash org.kde.Sdk//6.11 "$PWD/scripts/verify.sh" "$PWD/build/archive-test/omedit"
+      - uses: actions/upload-artifact@v7
+        if: steps.resolve.outputs.build == 'true'
+        with:
+          name: verified-omedit
+          path: dist/*
+          if-no-files-found: error
+          compression-level: 0
+
+  release:
+    needs: build
+    if: >-
+      needs.build.outputs.build == 'true' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' && inputs.publish))
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: verified-omedit
+          path: dist
+      - name: Publish the verified immutable archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -c omedit-*.sha256
+          # Build and validation jobs have no repository write permission.
+          # Publishing happens only after both assembled and extracted trees pass.
+          gh release create "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --draft --title "OMEdit ${RELEASE_TAG#v}" \
+            --notes "Community bundle of official OpenModelica binaries for KDE SDK 6.11. SOURCES and SOURCES.lock.json identify each component, package hash, and exact Flathub commit. Recipe: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/tree/$GITHUB_SHA. Validation: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID." \
+            omedit-*.tar.gz omedit-*.sha256 SOURCES SOURCES.lock.json
+          gh release edit "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --draft=false --latest

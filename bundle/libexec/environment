@@ -1,0 +1,7 @@
+# Sourced by the launchers. The caller sets bundle_dir to the extracted tree.
+export OPENMODELICAHOME="$bundle_dir/usr"
+export PATH="$bundle_dir/bin:$OPENMODELICAHOME/bin:$PATH"
+export LD_LIBRARY_PATH="$OPENMODELICAHOME/lib/x86_64-linux-gnu/omc:$OPENMODELICAHOME/lib/x86_64-linux-gnu/omc/omsi:$OPENMODELICAHOME/lib/x86_64-linux-gnu:$OPENMODELICAHOME/lib/x86_64-linux-gnu/lapack:$OPENMODELICAHOME/lib/x86_64-linux-gnu/blas:$bundle_dir/qt/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export QTWEBENGINEPROCESS_PATH="$bundle_dir/bin/QtWebEngineProcess"
+export QTWEBENGINE_RESOURCES_PATH="$bundle_dir/qt/resources"
+export QTWEBENGINE_LOCALES_PATH="$bundle_dir/qt/translations/qtwebengine_locales"
