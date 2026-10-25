@@ -28,6 +28,11 @@ copy the complete BaseApp, its headers, Qt PDF, QML modules or development tools
 Only the STL and OBJ readers from Debian's OpenSceneGraph plugin collection are
 included. The launcher sets their search path relative to the bundle.
 
+The stable `libomccpp` package supplies the C++ simulation target, with matching
+Debian Boost headers/libraries and the CPU OpenMP runtime. Its generated make
+configuration uses relocatable bundle paths and the SDK's GCC flags. Boost
+development tools and archives, LLVM and OpenMP offloading tools are excluded.
+
 Each archive and release includes `SOURCES` and `SOURCES.lock.json`, identifying
 the original URLs, package versions/hashes, package-index hashes, BaseApp commit,
 SDK commit and recipe hash. `QT-FILES.sha256` records individual Qt file hashes.
@@ -57,6 +62,7 @@ The verifier checks every ELF executable/shared library for unresolved imports,
 checks `omc --version`, and generates, compiles and runs a headless simulation
 using the launchers' default compiler settings. The workflow repeats the checks
 after extracting the finished archive at a different path.
+It also checks C++ decay and event/reinitialization simulations numerically.
 
 Within the runtime, run `omedit/bin/omedit` or `omedit/bin/omc`. The launchers set
 resource/library paths relative to their own directory. The default Debian

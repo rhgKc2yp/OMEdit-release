@@ -94,6 +94,29 @@ def copy_qt(base, sdk, bundle):
     return destination
 
 
+def configure_cpp(upstream):
+    """Relocate the stable Debian C++ runtime's generated make configuration."""
+    for name in ["ModelicaConfig_gcc.inc", "ModelicaLibraryConfig_gcc.inc"]:
+        path = upstream / "include/omc/cpp" / name
+        content = re.sub(r"/var/lib/jenkins/[^\s\"']*?/build(?=/)", "$(OMHOME)", path.read_text())
+        if name == "ModelicaConfig_gcc.inc":
+            for key, value in {
+                "BOOST_LIBS": "$(OMHOME)/lib/x86_64-linux-gnu",
+                "BOOST_INCLUDE": "$(OMHOME)/include",
+                "LAPACK_LIBS": "$(OMHOME)/lib",
+                # The bundle's clang++ launcher dispatches to SDK g++.
+                "OPENMP_FLAGS": "-fopenmp",
+            }.items():
+                content, count = re.subn(rf"^{key}=.*$", f"{key}={value}", content, flags=re.M)
+                if count != 1:
+                    raise ValueError(f"unexpected C++ configuration: {key}")
+        path.write_text(content)
+    libraries = upstream / "lib/x86_64-linux-gnu"
+    for name in ["filesystem", "serialization", "program_options"]:
+        target, = libraries.glob(f"libboost_{name}.so.*")
+        (libraries / f"libboost_{name}.so").symlink_to(target.name)
+
+
 def assemble(lock, output):
     if output.exists():
         raise ValueError(f"output already exists: {output}")
@@ -114,7 +137,7 @@ def assemble(lock, output):
         if package["kind"] == "openmodelica":
             shutil.copytree(unpack / "usr", upstream, dirs_exist_ok=True, symlinks=True)
         else:
-            # Debian runtime libraries, plus the STL/OBJ readers used by OMEdit.
+            # Debian runtime libraries and the C++ target's Boost headers.
             # No other plugin modules, developer tools or absolute /usr symlinks.
             source = unpack / "usr/lib/x86_64-linux-gnu"
             dest = upstream / "lib/x86_64-linux-gnu"
@@ -126,7 +149,15 @@ def assemble(lock, output):
                 if qt5 and not path.name.startswith(qt5):
                     continue
                 if path.is_symlink():
-                    (dest / path.name).symlink_to(os.readlink(path))
+                    if package["name"] == "libomp5-19":
+                        # Flatten the CPU runtime from ../llvm-19/lib without
+                        # bringing LLVM or its offloading runtime into the bundle.
+                        real = path.resolve(strict=True)
+                        if not real.is_relative_to(unpack):
+                            raise ValueError(f"library escapes extracted package: {path}")
+                        shutil.copy2(real, dest / path.name)
+                    else:
+                        (dest / path.name).symlink_to(os.readlink(path))
                 elif path.is_file():
                     shutil.copy2(path, dest / path.name)
             for relative in ["blas", "lapack"]:
@@ -138,11 +169,14 @@ def assemble(lock, output):
                 target.mkdir()
                 for name in ["osgdb_stl.so", "osgdb_obj.so"]:
                     shutil.copy2(plugins / name, target / name)
+            if package["name"] == "libboost1.83-dev":
+                shutil.copytree(unpack / "usr/include/boost", upstream / "include/boost", symlinks=True)
             doc = unpack / "usr/share/doc"
             if doc.exists():
                 shutil.copytree(doc, upstream / "share/doc", dirs_exist_ok=True, symlinks=True)
     for name, subfolder in [("blas", "blas"), ("lapack", "lapack")]:
         (upstream / "lib" / f"lib{name}.so").symlink_to(f"x86_64-linux-gnu/{subfolder}/lib{name}.so.3")
+    configure_cpp(upstream)
     qt = copy_qt(installed_files(lock["baseapp"]), installed_files(lock["sdk"]), output)
     shutil.copytree(ROOT / "bundle", output, dirs_exist_ok=True, symlinks=True)
     for path in (output / "bin").iterdir():

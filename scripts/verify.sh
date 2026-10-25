@@ -42,3 +42,26 @@ omc smoke.mos | tee simulation.log
 grep -F 'The simulation finished successfully.' simulation.log
 test -s Decay_res.mat
 echo 'Headless simulation passed using the bundle defaults.'
+
+cat > cpp.mos <<'EOF'
+setCommandLineOptions("--simCodeTarget=Cpp");
+loadString("model CppDecay Real x(start=1,fixed=true); equation der(x)=-x; end CppDecay;");
+simulate(CppDecay,stopTime=1,numberOfIntervals=100,outputFormat="csv");
+getErrorString();
+loadString("model CppEvent Real x(start=1,fixed=true); equation der(x)=-1; when x < 0 then reinit(x,1); end when; end CppEvent;");
+simulate(CppEvent,stopTime=2.5,numberOfIntervals=250,outputFormat="csv");
+getErrorString();
+EOF
+omc cpp.mos | tee cpp.log
+python3 - <<'PY'
+import csv
+import math
+for model, expected in [("CppDecay", math.exp(-1)), ("CppEvent", 0.5)]:
+    with open(f"{model}_res.csv") as stream:
+        rows = list(csv.DictReader(stream))
+    value = float(rows[-1]["x"])
+    # The C++ target prints CSV values with limited decimal precision.
+    assert abs(value - expected) < 2e-5, (model, value, expected)
+    print(f"{model}: x(final)={value}, expected={expected}")
+PY
+echo 'C++ simulation and event/reinitialization checks passed.'
