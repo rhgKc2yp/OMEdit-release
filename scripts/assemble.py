@@ -114,8 +114,8 @@ def assemble(lock, output):
         if package["kind"] == "openmodelica":
             shutil.copytree(unpack / "usr", upstream, dirs_exist_ok=True, symlinks=True)
         else:
-            # Debian runtime libraries only: no unused OpenSceneGraph plugin
-            # modules, developer tools or absolute /usr symlinks.
+            # Debian runtime libraries, plus the STL/OBJ readers used by OMEdit.
+            # No other plugin modules, developer tools or absolute /usr symlinks.
             source = unpack / "usr/lib/x86_64-linux-gnu"
             dest = upstream / "lib/x86_64-linux-gnu"
             dest.mkdir(parents=True, exist_ok=True)
@@ -132,6 +132,12 @@ def assemble(lock, output):
             for relative in ["blas", "lapack"]:
                 if (source / relative).exists():
                     shutil.copytree(source / relative, dest / relative, symlinks=True)
+            if package["name"] == "libopenscenegraph161":
+                plugins, = source.glob("osgPlugins-*")
+                target = dest / plugins.name
+                target.mkdir()
+                for name in ["osgdb_stl.so", "osgdb_obj.so"]:
+                    shutil.copy2(plugins / name, target / name)
             doc = unpack / "usr/share/doc"
             if doc.exists():
                 shutil.copytree(doc, upstream / "share/doc", dirs_exist_ok=True, symlinks=True)

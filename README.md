@@ -25,7 +25,8 @@ Qt WebEngine comes from an exact Flathub commit of
 copies the WebEngine Core/Widgets library dependency closure, its helper,
 resources and six locales, and records hashes of the copied files. It does not
 copy the complete BaseApp, its headers, Qt PDF, QML modules or development tools.
-Debian's optional OpenSceneGraph plugin collection is not included.
+Only the STL and OBJ readers from Debian's OpenSceneGraph plugin collection are
+included. The launcher sets their search path relative to the bundle.
 
 Each archive and release includes `SOURCES` and `SOURCES.lock.json`, identifying
 the original URLs, package versions/hashes, package-index hashes, BaseApp commit,
