@@ -11,7 +11,7 @@ import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 OM_PACKAGES = ["omc", "omc-common", "libomc", "libomcsimulation", "libomccpp", "omedit",
-               "libomplot", "libomsimulator", "libomsensplugin", "omlibrary"]
+               "libomplot", "libomsimulator", "omsimulator", "libomsensplugin", "omlibrary"]
 DEBIAN_PACKAGES = ["libicu76", "libblas3", "liblapack3", "libomniorb4-3t64",
                    "libomnithread4", "libopenscenegraph161", "libopenthreads21",
                    "libqt5core5t64", "libqt5gui5t64", "libqt5widgets5t64",

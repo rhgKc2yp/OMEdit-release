@@ -134,7 +134,14 @@ def assemble(lock, output):
         archive = checked_download(package, downloads)
         unpack = stage / package["name"]
         unpack_deb(archive, unpack)
-        if package["kind"] == "openmodelica":
+        if package["name"] == "omsimulator":
+            # Debian ships the embeddable library's schemas with the standalone
+            # simulator. Include only its schemas and copyright documentation.
+            shutil.copytree(unpack / "usr/share/OMSimulator/schema",
+                            upstream / "share/OMSimulator/schema", symlinks=True)
+            shutil.copytree(unpack / "usr/share/doc/omsimulator",
+                            upstream / "share/doc/omsimulator", symlinks=True)
+        elif package["kind"] == "openmodelica":
             shutil.copytree(unpack / "usr", upstream, dirs_exist_ok=True, symlinks=True)
         else:
             # Debian runtime libraries and the C++ target's Boost headers.
@@ -177,6 +184,7 @@ def assemble(lock, output):
     for name, subfolder in [("blas", "blas"), ("lapack", "lapack")]:
         (upstream / "lib" / f"lib{name}.so").symlink_to(f"x86_64-linux-gnu/{subfolder}/lib{name}.so.3")
     configure_cpp(upstream)
+    (upstream / "lib/x86_64-linux-gnu/omc/schema").symlink_to("../../../share/OMSimulator/schema")
     qt = copy_qt(installed_files(lock["baseapp"]), installed_files(lock["sdk"]), output)
     shutil.copytree(ROOT / "bundle", output, dirs_exist_ok=True, symlinks=True)
     for path in (output / "bin").iterdir():

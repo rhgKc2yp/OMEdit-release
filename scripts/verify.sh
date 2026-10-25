@@ -33,6 +33,40 @@ grep -F "OpenModelica $expected" <<<"$version"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 cd "$work"
+schema_dir="$OPENMODELICAHOME/lib/x86_64-linux-gnu/omc/schema"
+cat > fmi.xml <<'EOF'
+<fmiModelDescription fmiVersion="2.0" modelName="Check" guid="check" numberOfEventIndicators="0">
+  <ModelExchange modelIdentifier="Check"/>
+  <ModelVariables><ScalarVariable name="x" valueReference="0"><Real start="1"/></ScalarVariable></ModelVariables>
+  <ModelStructure/>
+</fmiModelDescription>
+EOF
+cat > ssp.xml <<'EOF'
+<SystemStructureDescription xmlns="http://ssp-standard.org/SSP1/SystemStructureDescription" name="Check" version="1.0">
+  <System name="root"/>
+</SystemStructureDescription>
+EOF
+python3 - <<'PY'
+import xml.etree.ElementTree as ET
+for kind in ["fmi", "ssp"]:
+    tree = ET.parse(f"{kind}.xml")
+    tree.getroot().set("flatparkUnexpectedAttribute", "invalid")
+    tree.write(f"invalid-{kind}.xml")
+PY
+for kind in fmi ssp; do
+    schema="$schema_dir/fmi2/fmi2ModelDescription.xsd"
+    [ "$kind" != ssp ] || schema="$schema_dir/ssp/SystemStructureDescription.xsd"
+    xmllint --nonet --noout --schema "$schema" "$kind.xml"
+    if xmllint --nonet --noout --schema "$schema" "invalid-$kind.xml" > "$kind-schema.log" 2>&1; then
+        echo "Invalid $kind metadata unexpectedly passed schema validation" >&2
+        exit 1
+    else
+        test "$?" -eq 3
+    fi
+    grep -F 'flatparkUnexpectedAttribute' "$kind-schema.log"
+done
+echo 'FMI/SSP schema validation checks passed.'
+
 cat > smoke.mos <<'EOF'
 loadString("model Decay Real x(start=1, fixed=true); equation der(x)=-x; end Decay;");
 simulate(Decay, stopTime=1.0, numberOfIntervals=100);

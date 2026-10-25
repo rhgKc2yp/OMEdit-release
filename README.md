@@ -33,6 +33,10 @@ Debian Boost headers/libraries and the CPU OpenMP runtime. Its generated make
 configuration uses relocatable bundle paths and the SDK's GCC flags. Boost
 development tools and archives, LLVM and OpenMP offloading tools are excluded.
 
+FMI/SSP schemas come from the same stable release's `omsimulator` package.
+A relative link beside the embeddable library exposes its schema directory.
+The standalone simulator executable and Python tools are not included.
+
 Each archive and release includes `SOURCES` and `SOURCES.lock.json`, identifying
 the original URLs, package versions/hashes, package-index hashes, BaseApp commit,
 SDK commit and recipe hash. `QT-FILES.sha256` records individual Qt file hashes.
@@ -63,6 +67,7 @@ checks `omc --version`, and generates, compiles and runs a headless simulation
 using the launchers' default compiler settings. The workflow repeats the checks
 after extracting the finished archive at a different path.
 It also checks C++ decay and event/reinitialization simulations numerically.
+Valid and invalid FMI/SSP XML fixtures exercise the bundled schemas offline.
 
 Within the runtime, run `omedit/bin/omedit` or `omedit/bin/omc`. The launchers set
 resource/library paths relative to their own directory. The default Debian
