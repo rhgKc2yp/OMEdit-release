@@ -10,3 +10,5 @@ tar --sort=name --mtime='UTC 2026-01-01' --owner=0 --group=0 --numeric-owner \
 (cd "$root/dist" && sha256sum "$name" > "$name.sha256")
 cp "$root/build/omedit/SOURCES" "$root/dist/SOURCES"
 cp "$root/build/omedit/SOURCES.lock.json" "$root/dist/SOURCES.lock.json"
+python3 "$root/scripts/payload_hash.py" "$root/build/omedit" \
+    > "$root/dist/PAYLOAD.sha256"

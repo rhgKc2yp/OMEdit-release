@@ -105,18 +105,61 @@ jobs:
         with:
           name: verified-omedit
           path: dist
-      - name: Publish the verified immutable archive
+      
+      - name: Publish only if payload changed
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.build.outputs.tag }}
         run: |
           set -euo pipefail
           cd dist
+
           sha256sum -c omedit-*.sha256
-          # Build and validation jobs have no repository write permission.
-          # Publishing happens only after both assembled and extracted trees pass.
-          gh release create "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --draft --title "OMEdit ${RELEASE_TAG#v}" \
+
+          # Do not overwrite an immutable release.
+          if gh release view "$RELEASE_TAG" \
+              -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists; skipping."
+            exit 0
+          fi
+
+          # Compare against the latest published release.
+          latest=$(gh release view \
+              -R "$GITHUB_REPOSITORY" \
+              --json tagName --jq .tagName 2>/dev/null || true)
+
+          if [ -n "$latest" ]; then
+            mkdir -p previous
+
+            if gh release download "$latest" \
+                -R "$GITHUB_REPOSITORY" \
+                -p PAYLOAD.sha256 \
+                -D previous; then
+
+              if cmp -s PAYLOAD.sha256 previous/PAYLOAD.sha256; then
+                echo "Payload unchanged from $latest."
+                echo "Skipping release."
+                exit 0
+              fi
+            else
+              echo "Previous payload hash unavailable."
+              echo "Publishing with payload metadata."
+            fi
+          fi
+
+          # Publish only when the deployable payload differs.
+          gh release create "$RELEASE_TAG" \
+            -R "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --draft \
+            --title "OMEdit ${RELEASE_TAG#v}" \
             --notes "Community bundle of official OpenModelica binaries for KDE SDK 6.11. SOURCES and SOURCES.lock.json identify each component, package hash, and exact Flathub commit. Recipe: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/tree/$GITHUB_SHA. Validation: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID." \
-            omedit-*.tar.gz omedit-*.sha256 SOURCES SOURCES.lock.json
-          gh release edit "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --draft=false --latest
+            omedit-*.tar.gz \
+            omedit-*.sha256 \
+            SOURCES \
+            SOURCES.lock.json \
+            PAYLOAD.sha256
+
+          gh release edit "$RELEASE_TAG" \
+            -R "$GITHUB_REPOSITORY" \
+            --draft=false --latest
